@@ -55,10 +55,10 @@ class GitHubManager(PullRequestsManager):
         pull_request = await self._get_pull_requests(pr_id)
 
         base_content = await self.__get_content(
-            pull_request["base"]["repo"]["url"], filename, pull_request["base"]["sha"]
+            pull_request["base"]["repo"]["url"], filename, pull_request["base"]["ref"]
         )
         head_content = await self.__get_content(
-            pull_request["head"]["repo"]["url"], filename, pull_request["head"]["sha"]
+            pull_request["head"]["repo"]["url"], filename, pull_request["head"]["ref"]
         )
 
         return {
@@ -319,15 +319,14 @@ class GitHubManager(PullRequestsManager):
         }
         return data
 
-    async def __get_content(self, url: str, filename: str, sha: str) -> str:
-        link = url_concat(
-            url_path_join(url, "contents", filename),
-            {"ref": sha},
-        )
+    async def __get_content(self, url: str, filename: str, ref: str) -> str:
         try:
-            return await self._call_github(
-                link, media_type="application/vnd.github.v3.raw", load_json=False
-            )
+            commit_url = url_path_join(url, "commits", ref)
+            commits = await self._call_github(commit_url)
+            commit = commits[0]
+            file = next(f for f in commit["files"] if f["filename"] == filename)
+            blob_url = url_path_join(url, "git", "blobs", file["sha"])
+            return await self._call_github(blob_url, media_type="application/vnd.github.v3.raw", load_json=False)
         except HTTPError as e:
             if e.status_code == 404:
                 return ""
